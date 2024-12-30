@@ -25,9 +25,55 @@ akave/akavelink:latest
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| NODE_ADDRESS | Akave node address (contact team) | Yes | "" |
+| NODE_ADDRESS | Akave node address | Yes | "" |
 | PRIVATE_KEY | Your Akave private key | Yes | "" |
 | PORT | API server port | No | 3000 |
+
+
+### 4. Deployment
+
+Expose the spawned api to the web **(Note: This will make your data public and accesible through web make sure you know what you're doing)**
+
+#### Using Ngrok
+
+Install [Ngrok](https://download.ngrok.com/)
+
+Run the following command to expose the api to the web
+```bash
+ngrok http 8000
+```
+
+#### Using Cloudflare Tunnel
+
+Install [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)
+
+Run the following command to expose the api to the web
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+
+#### Deploy to a Virtual Private Server (AWS, GCP, etc.)
+
+**Step 1:** Install Docker on your VPS
+
+**Step 2:** Pull the Akavelink docker image
+```bash
+docker pull akave/akavelink:latest
+```
+
+**Step 3:** Run the following command to expose the api to the web
+```bash
+docker run -d \
+-p 8000:3000 \
+-e NODE_ADDRESS="your_node_address" \
+-e PRIVATE_KEY="your_private_key" \
+akave/akavelink:latest
+```
+
+**Step 4:** Expose the port 8000 to the web
+
+**Step 5:** Access the api using the public url `http://your_public_ip:8000`
+
 
 # API Documentation
 
@@ -178,3 +224,4 @@ All endpoints will return the following format for errors:
     "error": "error message"
 }
 ```
+
