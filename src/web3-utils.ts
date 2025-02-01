@@ -1,8 +1,8 @@
-const { createPublicClient, http } = require('viem');
-const { privateKeyToAccount } = require('viem/accounts');
+import { createPublicClient, http, type PublicClient, type Hash, type Transaction } from 'viem';
+import { type Chain } from 'viem/chains';
 
-// Define Akave Fuji chain
-const akaveFuji = {
+// Define Akave Fuji chain type and configuration
+const akaveFuji: Chain = {
   id: 78963,
   name: "Akave Fuji",
   nativeCurrency: {
@@ -17,19 +17,23 @@ const akaveFuji = {
   },
 };
 
-// Initialize client
-const publicClient = createPublicClient({
+// Initialize client with type
+const publicClient: PublicClient = createPublicClient({
   chain: akaveFuji,
   transport: http(),
 });
 
-//@note: This function highly depends on Akave Fuji's block time and transaction confirmation time.
-//If the transaction is not confirmed in the first block, it will wait for 5 seconds and try again.
-//If the transaction is not confirmed in the second block, it will return null.
-
-//@TODO: Find a better way to get the related transaction hash.
-
-async function getLatestTransaction(address, commandId) {
+/**
+ * Gets the latest transaction hash for a given address
+ * @note This function highly depends on Akave Fuji's block time and transaction confirmation time.
+ * If the transaction is not confirmed in the first block, it will wait for 5 seconds and try again.
+ * If the transaction is not confirmed in the second block, it will return null.
+ * 
+ * @param address - The address to check transactions for
+ * @param commandId - Command ID for logging purposes
+ * @returns Promise<Hash | null> - The transaction hash or null if not found
+ */
+async function getLatestTransaction(address: string, commandId: string): Promise<Hash | null> {
   try {
     // First attempt
     const blockNumber = await publicClient.getBlockNumber();
@@ -40,7 +44,7 @@ async function getLatestTransaction(address, commandId) {
       includeTransactions: true
     });
 
-    let transactions = block.transactions.filter(tx => 
+    let transactions = (block.transactions as Transaction[]).filter(tx => 
       tx.from?.toLowerCase() === address.toLowerCase()
     );
 
@@ -62,7 +66,7 @@ async function getLatestTransaction(address, commandId) {
       includeTransactions: true
     });
 
-    transactions = newBlock.transactions.filter(tx => 
+    transactions = (newBlock.transactions as Transaction[]).filter(tx => 
       tx.from?.toLowerCase() === address.toLowerCase()
     );
 
@@ -81,6 +85,7 @@ async function getLatestTransaction(address, commandId) {
   }
 }
 
-module.exports = {
+export {
   getLatestTransaction,
-}; 
+  type Chain,
+};

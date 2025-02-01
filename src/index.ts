@@ -1,41 +1,57 @@
-const { spawn } = require("child_process");
-const { getLatestTransaction } = require('./web3-utils');
-const { privateKeyToAccount } = require('viem/accounts');
+import { spawn } from "child_process";
+import { getLatestTransaction } from './web3-utils';
+import { privateKeyToAccount } from 'viem/accounts';
+import {
+  AkaveIPCClientConfig,
+  BucketInfo,
+  FileInfo,
+  ParserType,
+  CommandResult
+} from './types/types';
+
+interface UploadOptions {
+  contentType?: string;
+  visibility?: 'public' | 'private';
+  tags?: Record<string, string>;
+}
 
 class AkaveIPCClient {
-  constructor(nodeAddress, privateKey) {
+  private nodeAddress: string;
+  private privateKey: string;
+  private address: string;
+
+  constructor({ nodeAddress, privateKey }: AkaveIPCClientConfig) {
     this.nodeAddress = nodeAddress;
-    if (privateKey && privateKey.startsWith('0x')) {
-      this.privateKey = privateKey.slice(2);
-    } else {
-      this.privateKey = privateKey;
-    }
+    this.privateKey = privateKey.startsWith('0x') ? privateKey.slice(2) : privateKey;
     this.address = privateKeyToAccount(`0x${this.privateKey}`).address;
   }
 
-  async executeCommand(args, parser = "default", trackTransaction = false) {
+  private async executeCommand<T>(
+    args: string[], 
+    parser: ParserType = "default", 
+    trackTransaction = false
+  ): Promise<CommandResult<T>> {
     const commandId = Math.random().toString(36).substring(7);
     console.log(`[${commandId}] Executing command: akavecli ${args.join(" ")}`);
 
-    const result = await new Promise((resolve, reject) => {
+    const result = await new Promise<T>((resolve, reject) => {
       const process = spawn("akavecli", args);
       let stdout = "";
       let stderr = "";
 
-      process.stdout.on("data", (data) => {
+      process.stdout.on("data", (data: Buffer) => {
         stdout += data.toString();
         console.log(`[${commandId}] stdout: ${data.toString().trim()}`);
       });
 
-      process.stderr.on("data", (data) => {
+      process.stderr.on("data", (data: Buffer) => {
         stderr += data.toString();
-        // Only log stderr if it's not a success message
         if (!data.toString().includes('File uploaded successfully:')) {
           console.error(`[${commandId}] stderr: ${data.toString().trim()}`);
         }
       });
 
-      process.on("close", (code) => {
+      process.on("close", (code: number) => {
         const output = (stdout + stderr).trim();
         
         if (code === 0) {
@@ -46,14 +62,14 @@ class AkaveIPCClient {
 
         try {
           const result = this.parseOutput(output, parser);
-          resolve(result);
+          resolve(result as T);
         } catch (error) {
-          console.error(`[${commandId}] Failed to parse output:`, error.message);
+          console.error(`[${commandId}] Failed to parse output:`, error);
           reject(error);
         }
       });
 
-      process.on("error", (err) => {
+      process.on("error", (err: Error) => {
         console.error(`[${commandId}] Process error:`, err);
         reject(err);
       });
@@ -62,55 +78,52 @@ class AkaveIPCClient {
     if (trackTransaction) {
       try {
         console.log(`[${commandId}] Fetching transaction hash...`);
-        const txHash = await getLatestTransaction(this.address);
+        const txHash = await getLatestTransaction(this.address, commandId);
         
         if (txHash) {
           console.log(`[${commandId}] Transaction hash found: ${txHash}`);
-          return { ...result, transactionHash: txHash };
-        } else {
-          console.warn(`[${commandId}] No transaction hash found`);
-          return result;
+          return { data: result, transactionHash: txHash };
         }
+        console.warn(`[${commandId}] No transaction hash found`);
       } catch (error) {
         console.error(`[${commandId}] Failed to get transaction hash:`, error);
-        return result;
       }
     }
 
-    return result;
+    return { data: result };
   }
 
-  parseOutput(output, parser) {
+  private parseOutput<T>(output: string, parser: ParserType): T {
     // Try JSON first for error messages
     try {
-      return JSON.parse(output);
+      return JSON.parse(output) as T;
     } catch (e) {
       // Not JSON, continue with specific parsers
     }
 
     switch (parser) {
       case "createBucket":
-        return this.parseBucketCreation(output);
+        return this.parseBucketCreation(output) as T;
       case "listBuckets":
-        return this.parseBucketList(output);
+        return this.parseBucketList(output) as T;
       case "viewBucket":
-        return this.parseBucketView(output);
+        return this.parseBucketView(output) as T;
       case "deleteBucket":
-        return this.parseBucketDeletion(output);
+        return this.parseBucketDeletion(output) as T;
       case "listFiles":
-        return this.parseFileList(output);
+        return this.parseFileList(output) as T;
       case "fileInfo":
-        return this.parseFileInfo(output);
+        return this.parseFileInfo(output) as T;
       case "uploadFile":
-        return this.parseFileUpload(output);
+        return this.parseFileUpload(output) as T;
       case "downloadFile":
-        return this.parseFileDownload(output);
+        return this.parseFileDownload(output) as T;
       default:
-        return output;
+        return output as T;
     }
   }
 
-  parseBucketCreation(output) {
+  private parseBucketCreation(output: string): BucketInfo {
     if (!output.startsWith("Bucket created:")) {
       throw new Error("Unexpected output format for bucket creation");
     }
@@ -118,45 +131,45 @@ class AkaveIPCClient {
       .substring("Bucket created:".length)
       .trim()
       .split(", ");
-    const bucket = {};
+    const bucket: Partial<BucketInfo> = {};
     bucketInfo.forEach((info) => {
       const [key, value] = info.split("=");
-      bucket[key.trim()] = value.trim();
+      bucket[key.trim() as keyof BucketInfo] = value.trim();
     });
-    return bucket;
+    return bucket as BucketInfo;
   }
 
-  parseBucketList(output) {
-    const buckets = [];
+  private parseBucketList(output: string): BucketInfo[] {
+    const buckets: BucketInfo[] = [];
     const lines = output.split("\n");
     for (const line of lines) {
       if (line.startsWith("Bucket:")) {
         const bucketInfo = line.substring(8).split(", ");
-        const bucket = {};
+        const bucket: Partial<BucketInfo> = {};
         bucketInfo.forEach((info) => {
           const [key, value] = info.split("=");
-          bucket[key.trim()] = value.trim();
+          bucket[key.trim() as keyof BucketInfo] = value.trim();
         });
-        buckets.push(bucket);
+        buckets.push(bucket as BucketInfo);
       }
     }
     return buckets;
   }
 
-  parseBucketView(output) {
+  private parseBucketView(output: string): BucketInfo {
     if (!output.startsWith("Bucket:")) {
       throw new Error("Unexpected output format for bucket view");
     }
     const bucketInfo = output.substring(8).split(", ");
-    const bucket = {};
+    const bucket: Partial<BucketInfo> = {};
     bucketInfo.forEach((info) => {
       const [key, value] = info.split("=");
-      bucket[key.trim()] = value.trim();
+      bucket[key.trim() as keyof BucketInfo] = value.trim();
     });
-    return bucket;
+    return bucket as BucketInfo;
   }
 
-  parseBucketDeletion(output) {
+  private parseBucketDeletion(output: string): BucketInfo {
     if (!output.startsWith("Bucket deleted:")) {
       throw new Error("Unexpected output format for bucket deletion");
     }
@@ -169,49 +182,48 @@ class AkaveIPCClient {
     }
 
     return {
-      Name: bucketInfo[1].trim(),
+      Name: bucketInfo[1].trim()
     };
   }
 
-  parseFileList(output) {
-    const files = [];
+  private parseFileList(output: string): FileInfo[] {
+    const files: FileInfo[] = [];
     const lines = output.split('\n');
     
     for (const line of lines) {
-        if (line.startsWith('File:')) {
-            const fileInfo = line.substring(6).split(', ');
-            const file = {};
-            
-            fileInfo.forEach(info => {
-                const [key, value] = info.split('=');
-                file[key.trim()] = value.trim();
-            });
-            
-            files.push(file);
-        }
+      if (line.startsWith('File:')) {
+        const fileInfo = line.substring(6).split(', ');
+        const file: Partial<FileInfo> = {};
+        
+        fileInfo.forEach(info => {
+          const [key, value] = info.split('=');
+          file[key.trim() as keyof FileInfo] = value.trim();
+        });
+        
+        files.push(file as FileInfo);
+      }
     }
     
     return files;
   }
 
-  parseFileInfo(output) {
+  private parseFileInfo(output: string): FileInfo {
     if (!output.startsWith('File:')) {
-        throw new Error('Unexpected output format for file info');
+      throw new Error('Unexpected output format for file info');
     }
     
     const fileInfo = output.substring(6).split(', ');
-    const file = {};
+    const file: Partial<FileInfo> = {};
     
     fileInfo.forEach(info => {
-        const [key, value] = info.split('=');
-        file[key.trim()] = value.trim();
+      const [key, value] = info.split('=');
+      file[key.trim() as keyof FileInfo] = value.trim();
     });
     
-    return file;
+    return file as FileInfo;
   }
 
-  parseFileUpload(output) {
-    // Split output into lines and find the success message
+  private parseFileUpload(output: string): FileInfo {
     const lines = output.split('\n');
     const successLine = lines.find(line => line.includes('File uploaded successfully:'));
     
@@ -224,24 +236,25 @@ class AkaveIPCClient {
       .trim()
       .split(', ');
     
-    const result = {};
+    const result: Partial<FileInfo> = {};
     fileInfo.forEach(info => {
       const [key, value] = info.split('=');
-      result[key.trim()] = value.trim();
+      result[key.trim() as keyof FileInfo] = value.trim();
     });
     
-    return result;
+    return result as FileInfo;
   }
 
-  parseFileDownload(output) {
+  private parseFileDownload(output: string): string {
     // For download, we don't need to parse the output
     // The actual file content is streamed directly to the response
     // This parser is only called for error cases
     return output;
   }
 
+
   // Bucket Operations
-  async createBucket(bucketName) {
+  async createBucket(bucketName: string): Promise<CommandResult<BucketInfo>> {
     const args = [
       "ipc",
       "bucket",
@@ -250,10 +263,10 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "createBucket", true);
+    return this.executeCommand<BucketInfo>(args, "createBucket", true);
   }
 
-  async deleteBucket(bucketName) {
+  async deleteBucket(bucketName: string): Promise<CommandResult<BucketInfo>> {
     const args = [
       "ipc",
       "bucket",
@@ -262,10 +275,10 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "deleteBucket", true);
+    return this.executeCommand<BucketInfo>(args, "deleteBucket", true);
   }
 
-  async viewBucket(bucketName) {
+  async viewBucket(bucketName: string): Promise<CommandResult<BucketInfo>> {
     const args = [
       "ipc",
       "bucket",
@@ -274,10 +287,10 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "viewBucket");
+    return this.executeCommand<BucketInfo>(args, "viewBucket");
   }
 
-  async listBuckets() {
+  async listBuckets(): Promise<CommandResult<BucketInfo[]>> {
     const args = [
       "ipc",
       "bucket",
@@ -285,11 +298,11 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "listBuckets");
+    return this.executeCommand<BucketInfo[]>(args, "listBuckets");
   }
 
   // File Operations
-  async listFiles(bucketName) {
+  async listFiles(bucketName: string): Promise<CommandResult<FileInfo[]>> {
     const args = [
       "ipc",
       "file",
@@ -298,10 +311,10 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "listFiles");
+    return this.executeCommand<FileInfo[]>(args, "listFiles");
   }
 
-  async getFileInfo(bucketName, fileName) {
+  async getFileInfo(bucketName: string, fileName: string): Promise<CommandResult<FileInfo>> {
     const args = [
       "ipc",
       "file",
@@ -311,10 +324,11 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "fileInfo");
+    return this.executeCommand<FileInfo>(args, "fileInfo");
   }
 
-  async uploadFile(bucketName, filePath) {
+
+  async uploadFile(bucketName: string, filePath: string, options: UploadOptions = {}): Promise<CommandResult<FileInfo>> {
     const args = [
       "ipc",
       "file",
@@ -324,10 +338,24 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "uploadFile", true);
+
+    if (options.contentType) {
+      args.push(`--content-type=${options.contentType}`);
+    }
+    if (options.visibility) {
+      args.push(`--visibility=${options.visibility}`);
+    }
+    if (options.tags) {
+      const tags = Object.entries(options.tags)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(',');
+      args.push(`--tags=${tags}`);
+    }
+
+    return this.executeCommand<FileInfo>(args, "uploadFile", true);
   }
 
-  async downloadFile(bucketName, fileName, destinationPath) {
+  async downloadFile(bucketName: string, fileName: string, destinationPath: string): Promise<CommandResult<string>> {
     const args = [
       "ipc",
       "file",
@@ -338,8 +366,8 @@ class AkaveIPCClient {
       `--node-address=${this.nodeAddress}`,
       `--private-key=${this.privateKey}`,
     ];
-    return this.executeCommand(args, "downloadFile");
+    return this.executeCommand<string>(args, "downloadFile");
   }
 }
 
-module.exports = AkaveIPCClient;
+export default AkaveIPCClient;
