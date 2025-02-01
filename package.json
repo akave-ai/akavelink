@@ -2,11 +2,11 @@
   "name": "akave-ipc-client",
   "version": "1.0.0",
   "description": "Akave IPC Client for Node.js",
-  "main": "dist/index.js",
+  "main": "dist/index.ts",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/server.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "clean": "rimraf dist",
     "test": "jest",
