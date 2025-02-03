@@ -7,6 +7,9 @@ const path = require("path");
 const os = require("os");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const errorHandler = require('./src/middleware/errorHandler');
+const { ValidationError, BucketOperationError, FileOperationError } = require('./src/errors/customErrors');
+
 
 dotenv.config();
 
@@ -25,6 +28,16 @@ app.use(cors(corsOptions));
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+//Error handler middleware
+app.use(errorHandler);
+
+
+// Add request ID middleware
+app.use((req, res, next) => {
+  req.requestId = Math.random().toString(36).substring(7);
+  next();
+});
 
 // Configure multer for file upload handling
 const upload = multer({
@@ -56,6 +69,10 @@ const logger = {
   }
 };
 
+// Logger set up
+app.set('logger', logger);
+
+
 // After client initialization
 logger.info('INIT', 'Initializing client', {
   nodeAddress: process.env.NODE_ADDRESS,
@@ -71,59 +88,100 @@ app.get("/health", (req, res) => {
 app.post("/buckets", async (req, res) => {
   try {
     const { bucketName } = req.body;
+    if (!bucketName) {
+      throw new ValidationError('Bucket name is required');
+    }
+    if (!/^[a-zA-Z0-9-_]+$/.test(bucketName)) {
+      throw new ValidationError('Bucket name can only contain letters, numbers, hyphens and underscores');
+    }
     const result = await client.createBucket(bucketName);
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 });
 
 app.get("/buckets", async (req, res) => {
   try {
-    const result = await client.listBuckets();
+    const result = await client.listBuckets().catch(error => {
+      throw new BucketOperationError('Failed to list buckets', { error: error.message });
+    });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 });
 
 app.get("/buckets/:bucketName", async (req, res) => {
   try {
-    const result = await client.viewBucket(req.params.bucketName);
+    if (!req.params.bucketName) {
+      throw new ValidationError('Bucket name is required');
+    }
+    const result = await client.viewBucket(req.params.bucketName).catch(error => {
+      throw new BucketOperationError('Failed to view bucket', { 
+        bucketName: req.params.bucketName,
+        error: error.message 
+      });
+    });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 });
 
 app.delete("/buckets/:bucketName", async (req, res) => {
   try {
-    const result = await client.deleteBucket(req.params.bucketName);
+    if (!req.params.bucketName) {
+      throw new ValidationError('Bucket name is required');
+    }
+    const result = await client.deleteBucket(req.params.bucketName).catch(error => {
+      throw new BucketOperationError('Failed to delete bucket', {
+        bucketName: req.params.bucketName,
+        error: error.message
+      });
+    });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 });
 
 // File endpoints
 app.get("/buckets/:bucketName/files", async (req, res) => {
   try {
-    const result = await client.listFiles(req.params.bucketName);
+    if (!req.params.bucketName) {
+      throw new ValidationError('Bucket name is required');
+    }
+    const result = await client.listFiles(req.params.bucketName).catch(error => {
+      throw new FileOperationError('Failed to list files', {
+        bucketName: req.params.bucketName,
+        error: error.message
+      });
+    });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error)
   }
 });
 
 app.get("/buckets/:bucketName/files/:fileName", async (req, res) => {
   try {
+    if (!req.params.bucketName || !req.params.fileName) {
+      throw new ValidationError('Bucket name and file name are required');
+    }
     const result = await client.getFileInfo(
       req.params.bucketName,
       req.params.fileName
-    );
+    ).catch(error => {
+      throw new FileOperationError('Failed to get file info', {
+        bucketName: req.params.bucketName,
+        fileName: req.params.fileName,
+        error: error.message
+      });
+    });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error)
   }
 });
 
@@ -131,6 +189,7 @@ app.get("/buckets/:bucketName/files/:fileName", async (req, res) => {
 app.post("/buckets/:bucketName/files", upload, async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
   try {
+    
     logger.info(requestId, 'Processing file upload request', { 
       bucket: req.params.bucketName 
     });
@@ -173,27 +232,35 @@ app.post("/buckets/:bucketName/files", upload, async (req, res) => {
         req.body.filePath
       );
     } else {
-      throw new Error("No file or filePath provided");
+      throw new ValidationError('No file or filePath provided');
     }
 
     logger.info(requestId, 'File upload completed', { result });
     res.json({ success: true, data: result });
   } catch (error) {
-    logger.error(requestId, 'File upload failed', error);
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 });
 
 app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
   try {
+    if (!req.params.bucketName || !req.params.fileName) {
+      throw new ValidationError('Bucket name and file name are required');
+    }
+    
     logger.info(requestId, 'Processing download request', {
       bucket: req.params.bucketName,
       file: req.params.fileName
     });
 
     // Create downloads directory if it doesn't exist
-    const downloadDir = path.join(process.cwd(), "downloads");
+    const downloadDir = path.join(process.cwd(), "downloads").catch(error => {
+      throw new FileOperationError('Failed to create download directory', {
+        path: downloadDir,
+        error: error.message
+      });
+    });
     await fs.mkdir(downloadDir, { recursive: true });
 
     const destinationPath = path.join(downloadDir, req.params.fileName);
@@ -203,13 +270,22 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
       req.params.bucketName,
       req.params.fileName,
       downloadDir
-    );
+    ).catch(error => {
+      throw new FileOperationError('Failed to download file', {
+        bucketName: req.params.bucketName,
+        fileName: req.params.fileName,
+        error: error.message
+      });
+    });
 
     // Check if file exists and is readable
     try {
       await fs.access(destinationPath, fsSync.constants.R_OK);
     } catch (err) {
-      throw new Error("File download failed or file is not readable");
+      throw new FileOperationError("File download failed or file is not readable", {
+        path: destinationPath,
+        error: err.message
+      });
     }
 
     // Get file stats
@@ -229,16 +305,16 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     // Handle stream errors
     fileStream.on("error", (err) => {
       logger.error(requestId, 'Stream error occurred', err);
-      if (!res.headersSent) {
-        res.status(500).json({ success: false, error: err.message });
-      }
+      next(new FileOperationError('Error streaming file', { 
+        path: destinationPath,
+        error: err.message 
+      }));
     });
 
     logger.info(requestId, 'Starting file stream');
     fileStream.pipe(res);
   } catch (error) {
-    logger.error(requestId, 'Download failed', error);
-    res.status(500).json({ success: false, error: error.message });
+    next(error)
   }
 });
 
