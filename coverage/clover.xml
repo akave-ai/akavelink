@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1738577162889" clover="3.2.0">
+  <project timestamp="1738577162889" name="All files">
+    <metrics statements="29" coveredstatements="9" conditionals="6" coveredconditionals="0" methods="4" coveredmethods="1" elements="39" coveredelements="10" complexity="0" loc="29" ncloc="29" packages="1" files="1" classes="1"/>
+    <file name="web3-utils.js" path="/home/seven/Documents/codes/oss/akavelink/web3-utils.js">
+      <metrics statements="29" coveredstatements="9" conditionals="6" coveredconditionals="0" methods="4" coveredmethods="1"/>
+      <line num="1" count="1" type="stmt"/>
+      <line num="2" count="1" type="stmt"/>
+      <line num="5" count="1" type="stmt"/>
+      <line num="21" count="1" type="stmt"/>
+      <line num="33" count="4" type="stmt"/>
+      <line num="35" count="4" type="stmt"/>
+      <line num="36" count="0" type="stmt"/>
+      <line num="38" count="0" type="stmt"/>
+      <line num="43" count="0" type="stmt"/>
+      <line num="44" count="0" type="stmt"/>
+      <line num="47" count="0" type="cond" truecount="0" falsecount="2"/>
+      <line num="48" count="0" type="stmt"/>
+      <line num="49" count="0" type="stmt"/>
+      <line num="50" count="0" type="stmt"/>
+      <line num="53" count="0" type="stmt"/>
+      <line num="54" count="0" type="stmt"/>
+      <line num="57" count="0" type="stmt"/>
+      <line num="58" count="0" type="stmt"/>
+      <line num="60" count="0" type="stmt"/>
+      <line num="65" count="0" type="stmt"/>
+      <line num="66" count="0" type="stmt"/>
+      <line num="69" count="0" type="stmt"/>
+      <line num="70" count="0" type="cond" truecount="0" falsecount="2"/>
+      <line num="71" count="0" type="stmt"/>
+      <line num="73" count="0" type="stmt"/>
+      <line num="76" count="0" type="cond" truecount="0" falsecount="2"/>
+      <line num="79" count="4" type="stmt"/>
+      <line num="80" count="4" type="stmt"/>
+      <line num="84" count="1" type="stmt"/>
+    </file>
+  </project>
+</coverage>
