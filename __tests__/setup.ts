@@ -1,4 +1,4 @@
-require("dotenv").config({ path: ".env.test" });
+import "dotenv/config"
 
 jest.mock("viem", ()=> ({
   createPublicClient: jest.fn(() => ({
