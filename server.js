@@ -7,6 +7,7 @@ const path = require("path");
 const os = require("os");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const { EventEmitter } = require('events');
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ app.use(cors(corsOptions));
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// Initialize event emitter for upload progress
+const uploadProgressEmitter = new EventEmitter();
 
 // Configure multer for file upload handling
 const upload = multer({
@@ -61,6 +65,132 @@ logger.info('INIT', 'Initializing client', {
   nodeAddress: process.env.NODE_ADDRESS,
   privateKeyLength: process.env.PRIVATE_KEY ? process.env.PRIVATE_KEY.length : 0,
 });
+
+// Create SSE middleware for progress updates
+const sseMiddleware = (req, res, next) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // Send initial connection message
+  res.write('event: connected\ndata: true\n\n');
+
+  next();
+};
+
+// Progress tracking endpoint using Server-Sent Events
+app.get('/upload-progress/:requestId', sseMiddleware, (req, res) => {
+  const { requestId } = req.params;
+
+  const sendProgress = (event) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  // Listen for progress events for this specific request
+  uploadEmitter.on(`${requestId}:start`, sendProgress);
+  uploadEmitter.on(`${requestId}:progress`, sendProgress);
+  uploadEmitter.on(`${requestId}:complete`, sendProgress);
+  uploadEmitter.on(`${requestId}:error`, sendProgress);
+
+  // Clean up when client disconnects
+  req.on('close', () => {
+    uploadEmitter.removeAllListeners(`${requestId}:start`);
+    uploadEmitter.removeAllListeners(`${requestId}:progress`);
+    uploadEmitter.removeAllListeners(`${requestId}:complete`);
+    uploadEmitter.removeAllListeners(`${requestId}:error`);
+  });
+});
+
+// Upload progress handler
+function createUploadProgressHandler(requestId) {
+  let uploadedBytes = 0;
+  let totalBytes = 0;
+
+  return {
+    start: (total) => {
+      totalBytes = total;
+      uploadEmitter.emit(`${requestId}:start`, {
+        type: 'start',
+        requestId,
+        totalBytes,
+        message: 'Upload started'
+      });
+      logger.info(requestId, 'Upload started', { totalBytes });
+    },
+
+    progress: (chunk) => {
+      uploadedBytes += chunk.length;
+      const progress = Math.round((uploadedBytes / totalBytes) * 100);
+
+      uploadEmitter.emit(`${requestId}:progress`, {
+        type: 'progress',
+        requestId,
+        uploadedBytes,
+        totalBytes,
+        progress,
+        message: `Uploaded ${uploadedBytes} of ${totalBytes} bytes (${progress}%)`
+      });
+
+      if (progress % 10 === 0) { // Log every 10%
+        logger.info(requestId, 'Upload progress', { progress, uploadedBytes, totalBytes });
+      }
+    },
+
+    complete: () => {
+      uploadEmitter.emit(`${requestId}:complete`, {
+        type: 'complete',
+        requestId,
+        message: 'Upload completed successfully'
+      });
+      logger.info(requestId, 'Upload completed', { totalBytes });
+    },
+
+    error: (error) => {
+      uploadEmitter.emit(`${requestId}:error`, {
+        type: 'error',
+        requestId,
+        error: error.message,
+        message: 'Upload failed'
+      });
+      logger.error(requestId, 'Upload failed', error);
+    }
+  };
+}
+
+// Upload middleware with progress tracking
+const uploadWithProgress = (req, res, next) => {
+  const requestId = Math.random().toString(36).substring(7);
+  const progressHandler = createUploadProgressHandler(requestId);
+
+  upload(req, res, (err) => {
+    if (err) {
+      progressHandler.error(err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    req.requestId = requestId;
+    next();
+  });
+
+  req.on('request', () => {
+    const contentLength = parseInt(req.headers['content-length'], 10);
+    if (contentLength) {
+      progressHandler.start(contentLength);
+    }
+  });
+
+  req.on('data', (chunk) => {
+    progressHandler.progress(chunk);
+  });
+
+  req.on('end', () => {
+    progressHandler.complete();
+  });
+
+  req.on('error', (error) => {
+    progressHandler.error(error);
+  });
+};
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -128,19 +258,19 @@ app.get("/buckets/:bucketName/files/:fileName", async (req, res) => {
 });
 
 // Modified file upload endpoint
-app.post("/buckets/:bucketName/files", upload, async (req, res) => {
-  const requestId = Math.random().toString(36).substring(7);
+app.post("/buckets/:bucketName/files", uploadWithProgress, async (req, res) => {
+  const requestId = req.requestId;
   try {
-    logger.info(requestId, 'Processing file upload request', { 
-      bucket: req.params.bucketName 
+    logger.info(requestId, 'Processing file upload request', {
+      bucket: req.params.bucketName
     });
 
     let result;
     const uploadedFile = req.files?.file?.[0] || req.files?.file1?.[0];
 
     if (uploadedFile) {
-      logger.info(requestId, 'Handling buffer upload', { 
-        filename: uploadedFile.originalname 
+      logger.info(requestId, 'Handling buffer upload', {
+        filename: uploadedFile.originalname
       });
       // Handle buffer upload
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "akave-"));
@@ -164,8 +294,8 @@ app.post("/buckets/:bucketName/files", upload, async (req, res) => {
         await fs.rm(tempDir, { recursive: true, force: true });
       }
     } else if (req.body.filePath) {
-      logger.info(requestId, 'Handling file path upload', { 
-        path: req.body.filePath 
+      logger.info(requestId, 'Handling file path upload', {
+        path: req.body.filePath
       });
       // Handle file path upload
       result = await client.uploadFile(
