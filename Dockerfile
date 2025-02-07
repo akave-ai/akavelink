@@ -1,14 +1,21 @@
 # Start with Go image to build the binary
 FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
 
+# Build arguments for versioning
+ARG BUILD_VERSION
+ARG GIT_COMMIT
+ARG BUILD_DATE
+
 # Install build dependencies including bash
 RUN apk add --no-cache make git bash
 
 # Set working directory
 WORKDIR /app
 
-# Clone the repository
-RUN git clone https://github.com/akave-ai/akavesdk .
+# Cache bust git clone using commit SHA
+ARG CACHE_BUST
+RUN git clone https://github.com/akave-ai/akavesdk . && \
+    git reset --hard ${GIT_COMMIT}
 
 # Set the target platform for the build
 ARG TARGETOS
@@ -17,6 +24,12 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH make build
 
 # Final image
 FROM --platform=$TARGETPLATFORM alpine:3.19
+
+# Add version labels
+LABEL version="${BUILD_VERSION}" \
+      git_commit="${GIT_COMMIT}" \
+      build_date="${BUILD_DATE}" \
+      description="Akave Link API Service"
 
 # Install Node.js and npm
 RUN apk add --no-cache nodejs npm
@@ -27,11 +40,9 @@ COPY --from=builder /app/bin/akavecli /usr/local/bin/akavecli
 # Set working directory
 WORKDIR /app
 
-# Copy package files first (better layer caching)
+# Copy package files first (better layer caching) and force npm to fetch latest packages
 COPY package*.json ./
-
-# Install only production dependencies
-RUN npm install --production
+RUN npm ci --no-cache --only=production && npm cache clean --force
 
 # Copy source files
 COPY server.js ./
