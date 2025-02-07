@@ -1,5 +1,5 @@
 # Start with Go image to build the binary
-FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
 
 # Build arguments for versioning
 ARG BUILD_VERSION
@@ -12,10 +12,9 @@ RUN apk add --no-cache make git bash
 # Set working directory
 WORKDIR /app
 
-# Cache bust git clone using commit SHA
-ARG CACHE_BUST
-RUN git clone https://github.com/akave-ai/akavesdk . && \
-    git reset --hard ${GIT_COMMIT}
+# Add cache busting
+ADD https://api.github.com/repos/akave-ai/akavesdk/git/refs/heads/main /tmp/version.json
+RUN git clone -b main https://github.com/akave-ai/akavesdk .
 
 # Set the target platform for the build
 ARG TARGETOS
