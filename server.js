@@ -7,6 +7,7 @@ const path = require("path");
 const os = require("os");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const apiLimiter = require("./rate-limiting-middleware");
 
 dotenv.config();
 
@@ -22,6 +23,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Rate limiter middleware
+app.use(apiLimiter);
 
 // Middleware to parse JSON bodies
 app.use(express.json());
