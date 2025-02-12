@@ -29,7 +29,7 @@ akave/akavelink:latest
 | PRIVATE_KEY | Your Akave private key | Yes | "" |
 | PORT | API server port | No | 3000 |
 
-NODE_ADDRESS: conenct.akave.ai:5500
+NODE_ADDRESS: connect.akave.ai:5500
 
 
 ### 4. Deployment
