@@ -26,6 +26,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Rate limiter middleware
+app.use(apiLimiter);
+
 // Middleware to parse JSON bodies
 app.use(express.json());
 
