@@ -215,16 +215,54 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     // Get file stats
     const stats = await fs.stat(destinationPath);
 
-    // Set headers for file download
+    // Add Accept-Ranges header
+    res.setHeader("Accept-Ranges", "bytes");
+
+    // Set common headers
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${req.params.fileName}"`
     );
     res.setHeader("Content-Type", "application/octet-stream");
-    res.setHeader("Content-Length", stats.size);
 
-    // Stream the file to response
-    const fileStream = fsSync.createReadStream(destinationPath);
+    let fileStream;
+    const range = req.headers.range;
+
+    if (range) {
+      // Handle range request
+      try {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+
+        if (start >= stats.size || end >= stats.size) {
+          // Invalid range
+          res.status(416).json({
+            success: false,
+            error: "Requested range not satisfiable",
+          });
+          return;
+        }
+
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${end}/${stats.size}`);
+        res.setHeader("Content-Length", end - start + 1);
+        fileStream = fsSync.createReadStream(destinationPath, { start, end });
+      } catch (rangeError) {
+        // If range parsing fails, fall back to full file download
+        logger.warn(
+          requestId,
+          "Invalid range header, falling back to full download",
+          { range }
+        );
+        res.setHeader("Content-Length", stats.size);
+        fileStream = fsSync.createReadStream(destinationPath);
+      }
+    } else {
+      // Normal download
+      res.setHeader("Content-Length", stats.size);
+      fileStream = fsSync.createReadStream(destinationPath);
+    }
 
     // Handle stream errors
     fileStream.on("error", (err) => {
