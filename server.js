@@ -7,6 +7,9 @@ const path = require("path");
 const os = require("os");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const { responseHandler } = require("./src/middleware/response-handler");
+const { errorHandler } = require("./src/middleware/error-handler");
+const { validateBucketName } = require("./src/middleware/request-validator");
 
 dotenv.config();
 
@@ -25,6 +28,8 @@ app.use(cors(corsOptions));
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+app.use(responseHandler);
+app.use(errorHandler);
 
 // Configure multer for file upload handling
 const upload = multer({
@@ -42,6 +47,12 @@ const client = new AkaveIPCClient(
   process.env.NODE_ADDRESS,
   process.env.PRIVATE_KEY
 );
+
+// attach the client to the app
+app.use((req, res, next) => {
+  req.client = client;
+  next();
+});
 
 // Add a simple logger
 const logger = {
@@ -66,66 +77,73 @@ logger.info("INIT", "Initializing client", {
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.sendSuccess({ status: "ok" });
 });
 
 // Bucket endpoints
-app.post("/buckets", async (req, res) => {
+app.post("/buckets", validateBucketName, async (req, res) => {
   try {
     const { bucketName } = req.body;
-    const result = await client.createBucket(bucketName);
-    res.json({ success: true, data: result });
+    const result = await req.client.createBucket(bucketName);
+    res.sendSuccess(result);
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
+    // next(error);
   }
 });
 
+// Get all buckets
 app.get("/buckets", async (req, res) => {
   try {
-    const result = await client.listBuckets();
-    res.json({ success: true, data: result });
+    const result = await req.client.listBuckets();
+    res.sendSuccess(result);
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
+    // next(error);
   }
 });
 
+// Get a bucket by name
 app.get("/buckets/:bucketName", async (req, res) => {
   try {
-    const result = await client.viewBucket(req.params.bucketName);
-    res.json({ success: true, data: result });
+    const result = await req.client.viewBucket(req.params.bucketName);
+    res.sendSuccess(result);
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
+    // next(error);
   }
 });
 
 app.delete("/buckets/:bucketName", async (req, res) => {
   try {
-    const result = await client.deleteBucket(req.params.bucketName);
-    res.json({ success: true, data: result });
+    console.log('Deleting bucket', req.params.bucketName);
+    const result = await req.client.deleteBucket(req.params.bucketName);
+    res.sendSuccess(result);
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
   }
 });
 
-// File endpoints
+// Get all files in a bucket
 app.get("/buckets/:bucketName/files", async (req, res) => {
   try {
     const result = await client.listFiles(req.params.bucketName);
-    res.json({ success: true, data: result });
+    res.sendSuccess(result);
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
+    next(error);
   }
 });
 
 app.get("/buckets/:bucketName/files/:fileName", async (req, res) => {
   try {
-    const result = await client.getFileInfo(
+    const result = await req.client.getFileInfo(
       req.params.bucketName,
       req.params.fileName
     );
-    res.json({ success: true, data: result });
+    res.sendSuccess(result);
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
   }
 });
 
@@ -154,10 +172,15 @@ app.post("/buckets/:bucketName/files", upload, async (req, res) => {
         await fs.writeFile(tempFilePath, uploadedFile.buffer);
 
         // Upload the temporary file
-        result = await client.uploadFile(req.params.bucketName, tempFilePath, {
-          fileName: uploadedFile.originalname,
-          cleanup: true, // Tell client to cleanup temp file
-        });
+        result = await req.client.uploadFile(
+          req.params.bucketName,
+          tempFilePath,
+          {
+            fileName: uploadedFile.originalname,
+            cleanup: true, // Tell client to cleanup temp file
+          }
+        );
+        logger.info(requestId, "File uploaded successfully", { result });
       } finally {
         // Cleanup temp directory
         await fs.rm(tempDir, { recursive: true, force: true });
@@ -167,19 +190,17 @@ app.post("/buckets/:bucketName/files", upload, async (req, res) => {
         path: req.body.filePath,
       });
       // Handle file path upload
-      result = await client.uploadFile(
+      result = await req.client.uploadFile(
         req.params.bucketName,
         req.body.filePath
       );
-    } else {
-      throw new Error("No file or filePath provided");
     }
 
     logger.info(requestId, "File upload completed", { result });
-    res.json({ success: true, data: result });
+    res.sendSuccess(result);
   } catch (error) {
     logger.error(requestId, "File upload failed", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
   }
 });
 
@@ -199,7 +220,7 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     const destinationPath = path.join(downloadDir, normalizedFileName);
 
     // Download the file
-    await client.downloadFile(
+    await req.client.downloadFile(
       req.params.bucketName,
       req.params.fileName,
       downloadDir
@@ -209,7 +230,7 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     try {
       await fs.access(destinationPath, fsSync.constants.R_OK);
     } catch (err) {
-      throw new Error("File download failed or file is not readable");
+      res.sendError(err);
     }
 
     // Get file stats
@@ -276,12 +297,13 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     fileStream.pipe(res);
   } catch (error) {
     logger.error(requestId, "Download failed", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.sendError(error);
   }
 });
 
 // Start server
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

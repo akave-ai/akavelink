@@ -15,6 +15,7 @@ describe("Bucket Operations", () => {
 
   beforeAll(() => {
     // Create test directory if it doesn't exist
+    console.log("Creating test directory");
     if (!fs.existsSync("./test-files")) {
       fs.mkdirSync("./test-files");
     }
