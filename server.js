@@ -229,34 +229,39 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     const range = req.headers.range;
 
     if (range) {
-      // Handle range request
-      try {
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
-
-        if (start >= stats.size || end >= stats.size) {
-          // Invalid range
-          res.status(416).json({
-            success: false,
-            error: "Requested range not satisfiable",
-          });
-          return;
-        }
-
-        res.status(206);
-        res.setHeader("Content-Range", `bytes ${start}-${end}/${stats.size}`);
-        res.setHeader("Content-Length", end - start + 1);
-        fileStream = fsSync.createReadStream(destinationPath, { start, end });
-      } catch (rangeError) {
-        // If range parsing fails, fall back to full file download
-        logger.warn(
-          requestId,
-          "Invalid range header, falling back to full download",
-          { range }
-        );
+      // Validate range format first
+      if (!range.startsWith("bytes=") || !range.includes("-")) {
+        // Invalid range format - fall back to full file
         res.setHeader("Content-Length", stats.size);
         fileStream = fsSync.createReadStream(destinationPath);
+      } else {
+        try {
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+
+          if (
+            isNaN(start) ||
+            isNaN(end) ||
+            start >= stats.size ||
+            end >= stats.size ||
+            start > end
+          ) {
+            return res.status(416).json({
+              success: false,
+              error: "Requested range not satisfiable",
+            });
+          }
+
+          res.status(206);
+          res.setHeader("Content-Range", `bytes ${start}-${end}/${stats.size}`);
+          res.setHeader("Content-Length", end - start + 1);
+          fileStream = fsSync.createReadStream(destinationPath, { start, end });
+        } catch (rangeError) {
+          // Any parsing error - fall back to full file
+          res.setHeader("Content-Length", stats.size);
+          fileStream = fsSync.createReadStream(destinationPath);
+        }
       }
     } else {
       // Normal download
