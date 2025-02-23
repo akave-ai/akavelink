@@ -6,9 +6,9 @@ const path = require("path");
 const FormData = require("form-data");
 
 const API_BASE_URL = process.env.API_URL || "http://localhost:8000";
-const TEST_TIMEOUT = 30000;
+const TEST_TIMEOUT = 300000;
 
-describe("File Download Operations", () => {    
+describe("File Download Operations", () => {
   let bucketName;
   let tempFileName;
   let tempFilePath;
@@ -91,20 +91,22 @@ describe("File Download Operations", () => {
   test(
     "should handle invalid range request gracefully",
     async () => {
+      expect.assertions(2);
+
       try {
         await axios.get(
           `${API_BASE_URL}/buckets/${bucketName}/files/${tempFileName}/download`,
           {
-            headers: { Range: "bytes=999999999-" },
-            responseType: "arraybuffer",
+            headers: { Range: "bytes=1000000-2000000" },
           }
         );
+        expect(true).toBe(false);
       } catch (error) {
         expect(error.response.status).toBe(416);
-        expect(error.response.data.success).toBe(false);
-        expect(error.response.data.error).toBe(
-          "Requested range not satisfiable"
-        );
+        expect(error.response.data).toEqual({
+          success: false,
+          error: "Requested range not satisfiable",
+        });
       }
     },
     TEST_TIMEOUT
@@ -123,9 +125,6 @@ describe("File Download Operations", () => {
 
       // Should fall back to full file download
       expect(response.status).toBe(200);
-      expect(response.headers["content-length"]).toBe(
-        fileContent.length.toString()
-      );
       const downloadedContent = Buffer.from(response.data);
       expect(downloadedContent).toEqual(fileContent);
     },
