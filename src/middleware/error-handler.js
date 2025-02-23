@@ -1,10 +1,13 @@
 const { parseSDKError } = require('../utils/error-parser');
 const { HttpStatus, SDKErrors, ErrorMessages, ErrorHttpStatus } = require('../utils/error-codes');
+const { logError } = require('../utils/logger');
 
 const errorHandler = (err, req, res, next) => {
+    const requestId = req.id || 'unknown';
+
     // If error is already an AkaveError
     if (err.name === 'AkaveError') {
-        console.log('AkaveError::: ', err.code, err);
+        logError(requestId, 'AkaveError occurred', err);
         return res.status(err.status).json({
             success: false,
             error: {

@@ -2,6 +2,7 @@ const { spawn } = require("child_process");
 const { getLatestTransaction } = require('./web3-utils');
 const { privateKeyToAccount } = require('viem/accounts');
 const { SDKErrors, ErrorMessages, ErrorHttpStatus } = require('./src/utils/error-codes');
+const { logInfo, logError, logDebug } = require('./src/utils/logger');
 
 class AkaveIPCClient {
   constructor(nodeAddress, privateKey) {
@@ -25,13 +26,13 @@ class AkaveIPCClient {
 
       process.stdout.on("data", (data) => {
         stdout += data.toString();
-        console.log(`[${commandId}] stdout: ${data.toString().trim()}`);
+        logDebug(commandId, "Command output", { stdout: data.toString().trim() });
       });
 
       process.stderr.on("data", (data) => {
         stderr += data.toString();
         if (!data.toString().includes('File uploaded successfully:')) {
-          console.error(`[${commandId}] stderr: ${data.toString().trim()}`);
+          logError(commandId, "Command error output", { stderr: data.toString().trim() });
         }
       });
 
@@ -76,7 +77,7 @@ class AkaveIPCClient {
         }
 
         if (code === 0) {
-          console.log(`[${commandId}] Command completed successfully`);
+          logInfo(commandId, "Command completed successfully");
           try {
             const result = this.parseOutput(output, parser);
             resolve(result);
@@ -85,19 +86,20 @@ class AkaveIPCClient {
             reject(this.handleError(error, output));
           }
         } else {
-          console.error(`[${commandId}] Command failed with code: ${code}`);
+          logError(commandId, "Command failed", { code });
           reject(this.handleError(new Error(stderr || output), output));
         }
       });
 
       process.on("error", (err) => {
-        console.error(`[${commandId}] Process error:`, err);
+        logError(commandId, "Process error", err);
         const handledError = this.handleError(err);
         reject(handledError);
       });
     });
 
     if (trackTransaction) {
+      logInfo(commandId, "Fetching transaction hash");
       try {
         console.log(`[${commandId}] Fetching transaction hash...`);
         const txHash = await getLatestTransaction(this.address);

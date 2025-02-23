@@ -10,6 +10,7 @@ const cors = require("cors");
 const { responseHandler } = require("./src/middleware/response-handler");
 const { errorHandler } = require("./src/middleware/error-handler");
 const { validateBucketName } = require("./src/middleware/request-validator");
+const { logInfo, logError, logWarning } = require('./src/utils/logger');
 
 dotenv.config();
 
@@ -51,28 +52,8 @@ const client = new AkaveIPCClient(
 // attach the client to the app
 app.use((req, res, next) => {
   req.client = client;
+  req.id = Math.random().toString(36).substring(7);
   next();
-});
-
-// Add a simple logger
-const logger = {
-  info: (id, message, data = {}) => {
-    console.log(`[${id}] 🔵 ${message}`, data);
-  },
-  error: (id, message, error = {}) => {
-    console.error(`[${id}] 🔴 ${message}`, error);
-  },
-  warn: (id, message, data = {}) => {
-    console.warn(`[${id}] 🟡 ${message}`, data);
-  },
-};
-
-// After client initialization
-logger.info("INIT", "Initializing client", {
-  nodeAddress: process.env.NODE_ADDRESS,
-  privateKeyLength: process.env.PRIVATE_KEY
-    ? process.env.PRIVATE_KEY.length
-    : 0,
 });
 
 // Health check endpoint
@@ -149,9 +130,8 @@ app.get("/buckets/:bucketName/files/:fileName", async (req, res) => {
 
 // Modified file upload endpoint
 app.post("/buckets/:bucketName/files", upload, async (req, res) => {
-  const requestId = Math.random().toString(36).substring(7);
   try {
-    logger.info(requestId, "Processing file upload request", {
+    logInfo(req.id, "Processing file upload request", {
       bucket: req.params.bucketName,
     });
 
@@ -159,7 +139,7 @@ app.post("/buckets/:bucketName/files", upload, async (req, res) => {
     const uploadedFile = req.files?.file?.[0] || req.files?.file1?.[0];
 
     if (uploadedFile) {
-      logger.info(requestId, "Handling buffer upload", {
+      logInfo(req.id, "Handling buffer upload", {
         filename: uploadedFile.originalname,
       });
       // Handle buffer upload
@@ -180,13 +160,13 @@ app.post("/buckets/:bucketName/files", upload, async (req, res) => {
             cleanup: true, // Tell client to cleanup temp file
           }
         );
-        logger.info(requestId, "File uploaded successfully", { result });
+        logInfo(req.id, "File uploaded successfully", { result });
       } finally {
         // Cleanup temp directory
         await fs.rm(tempDir, { recursive: true, force: true });
       }
     } else if (req.body.filePath) {
-      logger.info(requestId, "Handling file path upload", {
+      logInfo(req.id, "Handling file path upload", {
         path: req.body.filePath,
       });
       // Handle file path upload
@@ -196,18 +176,17 @@ app.post("/buckets/:bucketName/files", upload, async (req, res) => {
       );
     }
 
-    logger.info(requestId, "File upload completed", { result });
+    logInfo(req.id, "File upload completed", { result });
     res.sendSuccess(result);
   } catch (error) {
-    logger.error(requestId, "File upload failed", error);
+    logError(req.id, "File upload failed", error);
     res.sendError(error);
   }
 });
 
 app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
-  const requestId = Math.random().toString(36).substring(7);
   try {
-    logger.info(requestId, "Processing download request", {
+    logInfo(req.id, "Processing download request", {
       bucket: req.params.bucketName,
       file: req.params.fileName,
     });
@@ -271,8 +250,8 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
         fileStream = fsSync.createReadStream(destinationPath, { start, end });
       } catch (rangeError) {
         // If range parsing fails, fall back to full file download
-        logger.warn(
-          requestId,
+        logWarning(
+          req.id,
           "Invalid range header, falling back to full download",
           { range }
         );
@@ -287,16 +266,16 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
 
     // Handle stream errors
     fileStream.on("error", (err) => {
-      logger.error(requestId, "Stream error occurred", err);
+      logError(req.id, "Stream error occurred", err);
       if (!res.headersSent) {
         res.status(500).json({ success: false, error: err.message });
       }
     });
 
-    logger.info(requestId, "Starting file stream");
+    logInfo(req.id, "Starting file stream");
     fileStream.pipe(res);
   } catch (error) {
-    logger.error(requestId, "Download failed", error);
+    logError(req.id, "Download failed", error);
     res.sendError(error);
   }
 });
