@@ -17,7 +17,7 @@ class AkaveIPCClient {
 
   async executeCommand(args, parser = "default", trackTransaction = false) {
     const commandId = Math.random().toString(36).substring(7);
-    console.log(`[${commandId}] Executing command: akavecli ${args.join(" ")}`);
+    logInfo(commandId, "Executing command", { command: `akavecli ${args.join(" ")}` });
 
     const result = await new Promise((resolve, reject) => {
       const process = spawn("akavecli", args);
@@ -99,20 +99,19 @@ class AkaveIPCClient {
     });
 
     if (trackTransaction) {
-      logInfo(commandId, "Fetching transaction hash");
       try {
-        console.log(`[${commandId}] Fetching transaction hash...`);
+        logInfo(commandId, "Fetching transaction hash");
         const txHash = await getLatestTransaction(this.address);
 
         if (txHash) {
-          console.log(`[${commandId}] Transaction hash found: ${txHash}`);
+          logInfo(commandId, "Transaction hash found", { txHash });
           return { ...result, transactionHash: txHash };
         } else {
-          console.warn(`[${commandId}] No transaction hash found`);
+          logWarning(commandId, "No transaction hash found");
           return result;
         }
       } catch (error) {
-        console.error(`[${commandId}] Failed to get transaction hash:`, error);
+        logError(commandId, "Failed to get transaction hash", error);
         return result;
       }
     }
