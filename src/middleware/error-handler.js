@@ -4,9 +4,8 @@ const { HttpStatus, SDKErrors, ErrorMessages, ErrorHttpStatus } = require('../ut
 const errorHandler = (err, req, res, next) => {
     // If error is already an AkaveError
     if (err.name === 'AkaveError') {
-        console.log('AkaveError', err.code, err);
-        const status = ErrorHttpStatus[err.code] || HttpStatus.BAD_REQUEST;
-        return res.status(status).json({
+        console.log('AkaveError::: ', err.code, err);
+        return res.status(err.status).json({
             success: false,
             error: {
                 code: err.code,
@@ -31,7 +30,7 @@ const errorHandler = (err, req, res, next) => {
     // Handling SDK errors
     if (err.message && err.message.includes('sdk:')) {
         const { code, message, details } = parseSDKError(err);
-        const status = ErrorHttpStatus[code] || HttpStatus.BAD_REQUEST;
+        const status = ErrorHttpStatus[code] || HttpStatus.INTERNAL_SERVER_ERROR;
 
         return res.status(status).json({
             success: false,
@@ -45,7 +44,8 @@ const errorHandler = (err, req, res, next) => {
 
     // Add FILE_FULLY_UPLOADED to ErrorHttpStatus in error-codes.js
     if (err.message && err.message.includes('FileFullyUploaded')) {
-        return res.status(HttpStatus.CONFLICT).json({
+        console.log('FileFullyUploaded::: ', err.message);
+        return res.status(ErrorHttpStatus[SDKErrors.FILE_FULLY_UPLOADED]).json({
             success: false,
             error: {
                 code: SDKErrors.FILE_FULLY_UPLOADED,
@@ -56,7 +56,7 @@ const errorHandler = (err, req, res, next) => {
 
     // System errors (like ENOENT)
     if (err.code === 'ENOENT') {
-        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        return res.status(ErrorHttpStatus['SYSTEM_ERROR']).json({
             success: false,
             error: {
                 code: 'SYSTEM_ERROR',
@@ -67,7 +67,7 @@ const errorHandler = (err, req, res, next) => {
     }
 
     // Default error handler
-    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+    return res.status(ErrorHttpStatus['UNKNOWN_ERROR']).json({
         success: false,
         error: {
             code: 'UNKNOWN_ERROR',

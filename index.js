@@ -31,7 +31,6 @@ class AkaveIPCClient {
       process.stderr.on("data", (data) => {
         stderr += data.toString();
         if (!data.toString().includes('File uploaded successfully:')) {
-          console.log('ERROR IN FILE UPLOAD')
           console.error(`[${commandId}] stderr: ${data.toString().trim()}`);
         }
       });
@@ -54,17 +53,25 @@ class AkaveIPCClient {
             return;
           }
 
-          // Check for known error messages
-          for (const [code, message] of Object.entries(ErrorMessages)) {
-            if (stderr.toLowerCase().includes(message.toLowerCase())) {
-              const error = this.createAkaveError(
-                code,
-                message,
-                new Error(stderr)
-              );
-              reject(error);
-              return;
-            }
+          // Check for specific error messages in stderr
+          if (stderr.includes('BucketNonempty')) {
+            const error = this.createAkaveError(
+              SDKErrors.BUCKET_NONEMPTY,
+              ErrorMessages[SDKErrors.BUCKET_NONEMPTY],
+              new Error(stderr)
+            );
+            reject(error);
+            return;
+          }
+
+          if (stderr.includes('FileFullyUploaded')) {
+            const error = this.createAkaveError(
+              SDKErrors.FILE_FULLY_UPLOADED,
+              ErrorMessages[SDKErrors.FILE_FULLY_UPLOADED],
+              new Error(stderr)
+            );
+            reject(error);
+            return;
           }
         }
 
@@ -115,6 +122,7 @@ class AkaveIPCClient {
     const error = new Error(message);
     error.name = 'AkaveError';
     error.code = code;
+    error.status = ErrorHttpStatus[code] || HttpStatus.INTERNAL_SERVER_ERROR;
     error.originalError = originalError;
     error.timestamp = new Date();
 
@@ -133,6 +141,23 @@ class AkaveIPCClient {
     // First check if it's already an AkaveError
     if (error.name === 'AkaveError') {
       return error;
+    }
+
+    // Check for specific error strings
+    if (error.message.includes('BucketNonempty')) {
+      return this.createAkaveError(
+        SDKErrors.BUCKET_NONEMPTY,
+        ErrorMessages[SDKErrors.BUCKET_NONEMPTY],
+        error
+      );
+    }
+
+    if (error.message.includes('FileFullyUploaded')) {
+      return this.createAkaveError(
+        SDKErrors.FILE_FULLY_UPLOADED,
+        ErrorMessages[SDKErrors.FILE_FULLY_UPLOADED],
+        error
+      );
     }
 
     // Handle validation errors
@@ -285,12 +310,10 @@ class AkaveIPCClient {
       const [key, value] = info.split("=");
       bucket[key.trim()] = value.trim();
     });
-    console.log('BUCKET VIEW', bucket)
     return bucket;
   }
 
   parseBucketDeletion(output) {
-    // Check for specific error messages
     if (output.includes('BucketNonempty')) {
       throw this.createAkaveError(
         SDKErrors.BUCKET_NONEMPTY,
@@ -349,18 +372,18 @@ class AkaveIPCClient {
   }
 
   parseFileUpload(output) {
+    if (output.includes('FileFullyUploaded')) {
+      throw this.createAkaveError(
+        SDKErrors.FILE_FULLY_UPLOADED,
+        ErrorMessages[SDKErrors.FILE_FULLY_UPLOADED],
+        new Error(output)
+      );
+    }
+
     const lines = output.split('\n');
     const successLine = lines.find(line => line.includes('File uploaded successfully:'));
 
     if (!successLine) {
-      // Check for specific error messages
-      if (output.includes('FileFullyUploaded')) {
-        throw this.createAkaveError(
-          SDKErrors.FILE_FULLY_UPLOADED,
-          ErrorMessages[SDKErrors.FILE_FULLY_UPLOADED],
-          new Error(output)
-        );
-      }
       throw new Error('File upload failed: ' + output);
     }
 

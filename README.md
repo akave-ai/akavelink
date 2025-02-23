@@ -218,12 +218,91 @@ Access this URL directly in your browser to download the file. The file will be 
 }
 ```
 
-## Error Responses
-All endpoints will return the following format for errors:
+## Error Handling
+
+### Error Response Format
+All API errors follow a consistent format:
 ```json
 {
     "success": false,
-    "error": "error message"
+    "error": {
+        "code": "ERROR_CODE",
+        "message": "Human readable error message",
+        "details": {} // Optional additional information
+    }
+}
+```
+
+### SDK Error Codes
+| Error Code | HTTP Status | Description | Common Scenarios |
+|------------|-------------|-------------|------------------|
+| 0x497ef2c2 | 409 | Bucket already exists | Creating a bucket with an existing name |
+| 0x4f4b202a | 400 | Invalid bucket name | Invalid characters in bucket name |
+| 0x938a92b7 | 404 | Bucket does not exist | Accessing a non-existent bucket |
+| 0x89fddc00 | 400 | Bucket is not empty | Deleting a bucket containing files |
+| 0xdc64d0ad | 403 | Invalid bucket owner | Accessing bucket without permissions |
+| 0x6891dde0 | 409 | File already exists | Creating duplicate file |
+| 0x77a3cbd8 | 400 | Invalid file name | Invalid characters in file name |
+| 0x21584586 | 404 | File does not exist | Accessing non-existent file |
+| 0xd96b03b1 | 409 | File is already fully uploaded | Re-uploading existing file |
+| 0xd09ec7af | 409 | Duplicate file name | File name conflict |
+| 0x702cf740 | 409 | Duplicate file chunk | Uploading same chunk twice |
+| 0xcefa6b05 | 404 | No policy found | Missing access policy |
+
+### Validation Errors
+| Error Code | HTTP Status | Description |
+|------------|-------------|-------------|
+| VALIDATION_ERROR | 400 | Invalid input parameters |
+| SYSTEM_ERROR | 500 | Internal system error |
+| UNKNOWN_ERROR | 500 | Unexpected error |
+
+### Common Error Scenarios
+
+1. **Creating Duplicate Bucket**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "0x497ef2c2",
+        "message": "Bucket already exists"
+    }
+}
+```
+
+2. **Deleting Non-empty Bucket**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "0x89fddc00",
+        "message": "Bucket is not empty"
+    }
+}
+```
+
+3. **Uploading Duplicate File**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "0xd96b03b1",
+        "message": "File is already fully uploaded"
+    }
+}
+```
+
+4. **Invalid Input**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Invalid input parameters",
+        "details": {
+            "field": "", // field name
+            "type": "required"
+        }
+    }
 }
 ```
 
