@@ -2,7 +2,7 @@ const { spawn } = require("child_process");
 const { getLatestTransaction } = require('./web3-utils');
 const { privateKeyToAccount } = require('viem/accounts');
 const { SDKErrors, ErrorMessages, ErrorHttpStatus } = require('./src/utils/error-codes');
-const { logInfo, logError, logDebug } = require('./src/utils/logger');
+const { logInfo, logError, logDebug, logWarning } = require('./src/utils/logger');
 
 class AkaveIPCClient {
   constructor(nodeAddress, privateKey) {
