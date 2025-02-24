@@ -11,6 +11,7 @@ const { responseHandler } = require("./src/middleware/response-handler");
 const { errorHandler } = require("./src/middleware/error-handler");
 const { validateBucketName } = require("./src/middleware/request-validator");
 const { logInfo, logError, logWarning } = require('./src/utils/logger');
+const { ErrorHttpStatus, ErrorMessages } = require('./src/constants/error-codes');
 
 dotenv.config();
 
@@ -229,19 +230,22 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     const range = req.headers.range;
 
     if (range) {
-      // Handle range request
       try {
         const parts = range.replace(/bytes=/, "").split("-");
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
 
         if (start >= stats.size || end >= stats.size) {
-          // Invalid range
-          res.status(416).json({
-            success: false,
-            error: "Requested range not satisfiable",
+          // Use sendError from response handler
+          return res.sendError({
+            code: 'RANGE_ERROR',
+            status: ErrorHttpStatus['RANGE_ERROR'],
+            message: ErrorMessages['RANGE_ERROR'],
+            details: {
+              requestedRange: range,
+              fileSize: stats.size
+            }
           });
-          return;
         }
 
         res.status(206);
@@ -249,12 +253,7 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
         res.setHeader("Content-Length", end - start + 1);
         fileStream = fsSync.createReadStream(destinationPath, { start, end });
       } catch (rangeError) {
-        // If range parsing fails, fall back to full file download
-        logWarning(
-          req.id,
-          "Invalid range header, falling back to full download",
-          { range }
-        );
+        logWarning(req.id, "Invalid range header, falling back to full download", { range });
         res.setHeader("Content-Length", stats.size);
         fileStream = fsSync.createReadStream(destinationPath);
       }
@@ -268,7 +267,13 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
     fileStream.on("error", (err) => {
       logError(req.id, "Stream error occurred", err);
       if (!res.headersSent) {
-        res.status(500).json({ success: false, error: err.message });
+        // Use sendError from response handler
+        res.sendError({
+          code: 'STREAM_ERROR',
+          status: ErrorHttpStatus['STREAM_ERROR'],
+          message: ErrorMessages['STREAM_ERROR'],
+          details: err.message
+        });
       }
     });
 

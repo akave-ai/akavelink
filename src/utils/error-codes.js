@@ -6,7 +6,8 @@ const HttpStatus = {
     FORBIDDEN: 403,
     NOT_FOUND: 404,
     CONFLICT: 409,
-    INTERNAL_SERVER_ERROR: 500
+    INTERNAL_SERVER_ERROR: 500,
+    RANGE_NOT_SATISFIABLE: 416,
 };
 
 // SDK Error codes from akavesdk/private/ipc/errors.go
@@ -65,7 +66,9 @@ const ErrorMessages = {
     [SDKErrors.INVALID_ENCODED_SIZE]: 'Invalid encoded size',
     [SDKErrors.INVALID_FILE_CID]: 'Invalid file CID',
     [SDKErrors.INDEX_MISMATCH]: 'Index mismatch',
-    [SDKErrors.NO_POLICY]: 'No policy found'
+    [SDKErrors.NO_POLICY]: 'No policy found',
+    'RANGE_ERROR': 'Requested range not satisfiable',
+    'STREAM_ERROR': 'Error occurred while streaming file',
 };
 
 // HTTP Status mapping for SDK errors
@@ -92,7 +95,9 @@ const ErrorHttpStatus = {
     [SDKErrors.NO_POLICY]: HttpStatus.NOT_FOUND,
     'VALIDATION_ERROR': HttpStatus.BAD_REQUEST,
     'SYSTEM_ERROR': HttpStatus.INTERNAL_SERVER_ERROR,
-    'UNKNOWN_ERROR': HttpStatus.INTERNAL_SERVER_ERROR
+    'UNKNOWN_ERROR': HttpStatus.INTERNAL_SERVER_ERROR,
+    'RANGE_ERROR': HttpStatus.RANGE_NOT_SATISFIABLE,
+    'STREAM_ERROR': HttpStatus.INTERNAL_SERVER_ERROR,
 };
 
 module.exports = { HttpStatus, SDKErrors, ErrorMessages, ErrorHttpStatus };
