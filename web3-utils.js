@@ -3,16 +3,16 @@ const { privateKeyToAccount } = require('viem/accounts');
 
 // Define Akave Fuji chain
 const akaveFuji = {
-  id: 78963,
-  name: "Akave Fuji",
+  id: 78964,
+  name: "Akave Testnet",
   nativeCurrency: {
     decimals: 18,
     name: "AKAVE",
-    symbol: "AKVF",
+    symbol: "AKVT",
   },
   rpcUrls: {
     default: {
-      http: ["https://node1-asia.ava.akave.ai/ext/bc/tLqcnkJkZ1DgyLyWmborZK9d7NmMj6YCzCFmf9d9oQEd2fHon/rpc"],
+      http: ["https://n1-us.akave.ai/ext/bc/2JMWNmZbYvWcJRPPy1siaDBZaDGTDAaqXoY5UBKh4YrhNFzEce/rpc"],
     },
   },
 };
