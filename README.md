@@ -9,14 +9,11 @@ A containerized API service for interacting with Akave's decentralized storage n
 docker pull akave/akavelink:latest
 ```
 
-### 2. Get Node Address
-Contact Akave team to receive your dedicated node address.
-
-### 3. Run the container to serve a personal api
+### 2. Run the container to serve a personal api
 ```bash
 docker run -d \
 -p 8000:3000 \
--e NODE_ADDRESS="your_node_address" \
+-e NODE_ADDRESS="connect.akave.ai:5500" \
 -e PRIVATE_KEY="your_private_key" \
 akave/akavelink:latest
 ```
@@ -32,7 +29,7 @@ akave/akavelink:latest
 NODE_ADDRESS: connect.akave.ai:5500
 
 
-### 4. Deployment
+### 3. Deployment
 
 Expose the spawned api to the web **(Note: This will make your data public and accesible through web make sure you know what you're doing)**
 
@@ -67,7 +64,7 @@ docker pull akave/akavelink:latest
 ```bash
 docker run -d \
 -p 8000:3000 \
--e NODE_ADDRESS="your_node_address" \
+-e NODE_ADDRESS="connect.akave.ai:5500" \
 -e PRIVATE_KEY="your_private_key" \
 akave/akavelink:latest
 ```
