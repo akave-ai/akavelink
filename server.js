@@ -7,6 +7,8 @@ const path = require("path");
 const os = require("os");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const rateLimit = require('express-rate-limit');
+
 
 dotenv.config();
 
@@ -21,10 +23,25 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+// Configure RateLimiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100, 
+  message: {
+    success: false,
+    error: 'Too many requests from this IP, please try again after 15 minutes'
+  },
+  standardHeaders: true, 
+  legacyHeaders: false, 
+});
+
 app.use(cors(corsOptions));
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// Apply rate limiting to all routes
+app.use(apiLimiter)
 
 // Configure multer for file upload handling
 const upload = multer({
