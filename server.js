@@ -7,6 +7,7 @@ const path = require("path");
 const os = require("os");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const logger = require("./logger");
 
 dotenv.config();
 
@@ -42,27 +43,6 @@ const client = new AkaveIPCClient(
   process.env.NODE_ADDRESS,
   process.env.PRIVATE_KEY
 );
-
-// Add a simple logger
-const logger = {
-  info: (id, message, data = {}) => {
-    console.log(`[${id}] 🔵 ${message}`, data);
-  },
-  error: (id, message, error = {}) => {
-    console.error(`[${id}] 🔴 ${message}`, error);
-  },
-  warn: (id, message, data = {}) => {
-    console.warn(`[${id}] 🟡 ${message}`, data);
-  },
-};
-
-// After client initialization
-logger.info("INIT", "Initializing client", {
-  nodeAddress: process.env.NODE_ADDRESS,
-  privateKeyLength: process.env.PRIVATE_KEY
-    ? process.env.PRIVATE_KEY.length
-    : 0,
-});
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -288,10 +268,18 @@ app.get("/buckets/:bucketName/files/:fileName/download", async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info(`Server running on port ${PORT}`);
 });
 
 // Add at the top of server.js with other utilities
 function normalizeFileName(fileName) {
   return fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
 }
+
+// After client initialization
+logger.info("Initializing client", {
+  nodeAddress: process.env.NODE_ADDRESS,
+  privateKeyLength: process.env.PRIVATE_KEY
+    ? process.env.PRIVATE_KEY.length
+    : 0,
+});

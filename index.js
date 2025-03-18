@@ -1,11 +1,11 @@
 const { spawn } = require("child_process");
-const { getLatestTransaction } = require('./web3-utils');
-const { privateKeyToAccount } = require('viem/accounts');
+const { privateKeyToAccount } = require("viem/accounts");
+const logger = require("./logger");
 
 class AkaveIPCClient {
   constructor(nodeAddress, privateKey) {
     this.nodeAddress = nodeAddress;
-    if (privateKey && privateKey.startsWith('0x')) {
+    if (privateKey && privateKey.startsWith("0x")) {
       this.privateKey = privateKey.slice(2);
     } else {
       this.privateKey = privateKey;
@@ -13,9 +13,9 @@ class AkaveIPCClient {
     this.address = privateKeyToAccount(`0x${this.privateKey}`).address;
   }
 
-  async executeCommand(args, parser = "default", trackTransaction = false) {
+  async executeCommand(args, parser = "default") {
     const commandId = Math.random().toString(36).substring(7);
-    console.log(`[${commandId}] Executing command: akavecli ${args.join(" ")}`);
+    logger.info(`Executing ${args[1]} ${args[2]} command`, { commandId });
 
     const result = await new Promise((resolve, reject) => {
       const process = spawn("akavecli", args);
@@ -24,58 +24,53 @@ class AkaveIPCClient {
 
       process.stdout.on("data", (data) => {
         stdout += data.toString();
-        console.log(`[${commandId}] stdout: ${data.toString().trim()}`);
+        logger.debug(`Command output`, {
+          commandId,
+          output: data.toString().trim(),
+        });
       });
 
       process.stderr.on("data", (data) => {
         stderr += data.toString();
-        // Only log stderr if it's not a success message
-        if (!data.toString().includes('File uploaded successfully:')) {
-          console.error(`[${commandId}] stderr: ${data.toString().trim()}`);
+        // Only log if it's actually an error
+        if (!data.toString().includes("File uploaded successfully:")) {
+          logger.debug(`Command output from stderr`, {
+            commandId,
+            output: data.toString().trim(),
+          });
         }
       });
 
       process.on("close", (code) => {
         const output = (stdout + stderr).trim();
-        
+
         if (code === 0) {
-          console.log(`[${commandId}] Command completed successfully`);
+          logger.info(`Command completed successfully`, { commandId });
         } else {
-          console.error(`[${commandId}] Command failed with code: ${code}`);
+          logger.error(`Command failed with code: ${code}`, { commandId });
         }
 
         try {
           const result = this.parseOutput(output, parser);
           resolve(result);
         } catch (error) {
-          console.error(`[${commandId}] Failed to parse output:`, error.message);
+          logger.error(`Failed to parse output`, {
+            commandId,
+            error: error.message,
+          });
           reject(error);
         }
       });
 
       process.on("error", (err) => {
-        console.error(`[${commandId}] Process error:`, err);
+        logger.error(`Process error`, {
+          commandId,
+          error: err.message,
+        });
         reject(err);
       });
     });
 
-    if (trackTransaction) {
-      try {
-        console.log(`[${commandId}] Fetching transaction hash...`);
-        const txHash = await getLatestTransaction(this.address);
-        
-        if (txHash) {
-          console.log(`[${commandId}] Transaction hash found: ${txHash}`);
-          return { ...result, transactionHash: txHash };
-        } else {
-          console.warn(`[${commandId}] No transaction hash found`);
-          return result;
-        }
-      } catch (error) {
-        console.error(`[${commandId}] Failed to get transaction hash:`, error);
-        return result;
-      }
-    }
 
     return result;
   }
@@ -175,61 +170,66 @@ class AkaveIPCClient {
 
   parseFileList(output) {
     const files = [];
-    const lines = output.split('\n');
-    
+    const lines = output.split("\n");
+
     for (const line of lines) {
-        if (line.startsWith('File:')) {
-            const fileInfo = line.substring(6).split(', ');
-            const file = {};
-            
-            fileInfo.forEach(info => {
-                const [key, value] = info.split('=');
-                file[key.trim()] = value.trim();
-            });
-            
-            files.push(file);
-        }
+      if (line.startsWith("File:")) {
+        const fileInfo = line.substring(6).split(", ");
+        const file = {};
+
+        fileInfo.forEach((info) => {
+          const [key, value] = info.split("=");
+          file[key.trim()] = value.trim();
+        });
+
+        files.push(file);
+      }
     }
-    
+
     return files;
   }
 
   parseFileInfo(output) {
-    if (!output.startsWith('File:')) {
-        throw new Error('Unexpected output format for file info');
+    if (!output.startsWith("File:")) {
+      throw new Error("Unexpected output format for file info");
     }
-    
-    const fileInfo = output.substring(6).split(', ');
+
+    const fileInfo = output.substring(6).split(", ");
     const file = {};
-    
-    fileInfo.forEach(info => {
-        const [key, value] = info.split('=');
-        file[key.trim()] = value.trim();
+
+    fileInfo.forEach((info) => {
+      const [key, value] = info.split("=");
+      file[key.trim()] = value.trim();
     });
-    
+
     return file;
   }
 
   parseFileUpload(output) {
     // Split output into lines and find the success message
-    const lines = output.split('\n');
-    const successLine = lines.find(line => line.includes('File uploaded successfully:'));
-    
+    const lines = output.split("\n");
+    const successLine = lines.find((line) =>
+      line.includes("File uploaded successfully:")
+    );
+
     if (!successLine) {
-      throw new Error('File upload failed: ' + output);
+      throw new Error("File upload failed: " + output);
     }
-    
+
     const fileInfo = successLine
-      .substring(successLine.indexOf('File uploaded successfully:') + 'File uploaded successfully:'.length)
+      .substring(
+        successLine.indexOf("File uploaded successfully:") +
+          "File uploaded successfully:".length
+      )
       .trim()
-      .split(', ');
-    
+      .split(", ");
+
     const result = {};
-    fileInfo.forEach(info => {
-      const [key, value] = info.split('=');
+    fileInfo.forEach((info) => {
+      const [key, value] = info.split("=");
       result[key.trim()] = value.trim();
     });
-    
+
     return result;
   }
 

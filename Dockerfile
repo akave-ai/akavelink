@@ -37,8 +37,7 @@ RUN npm install --production
 # Copy source files
 COPY server.js ./
 COPY index.js ./
-COPY web3-utils.js ./
-
+COPY logger.js ./
 # Environment variables with defaults
 ENV NODE_ADDRESS=""
 ENV PRIVATE_KEY=""
