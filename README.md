@@ -191,8 +191,7 @@ Upload a file to a specific bucket.
     "success": true,
     "data": {
         "Name": "string",
-        "Size": "number",
-        "Hash": "string"
+        "Size": "number"
     }
 }
 ```
