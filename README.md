@@ -32,7 +32,7 @@ akave/akavelink:latest
 
 ### 4. Deployment
 
-Expose the spawned api to the web **(Note: This will make your data public and accesible through web make sure you know what you're doing)**
+Expose the spawned api to the web **(Note: This will make your data public and accessible through web make sure you know what you're doing)**
 
 #### Using Ngrok
 
