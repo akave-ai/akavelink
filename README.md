@@ -1,6 +1,6 @@
 # Akave Link API
 
-A containerized API service for interacting with Akave's decentralized storage network.
+A containerized API service for interacting with Akave's decentralized storage network. Full usage instructions can be found in our docs: [JS/Docker example code](https://docs.akave.ai/js-docker-example-code)
 
 ## Quick Start
 
