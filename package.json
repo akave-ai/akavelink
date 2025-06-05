@@ -4,14 +4,15 @@
   "description": "REST API wrapper for Akave IPC CLI",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "nodemon src/server.ts",
     "test": "jest",
     "test:integration": "jest --config=jest.config.integration.js"
   },
   "files": [
-    "index.js",
-    "server.js"
+    "index.ts",
+    "server.ts"
   ],
   "dependencies": {
     "axios": "^1.7.9",
@@ -24,10 +25,17 @@
     "viem": "^2.21.42"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/fs-extra": "^11.0.4",
     "@types/jest": "^29.5.12",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.15.29",
     "form-data": "^4.0.0",
     "jest": "^29.7.0",
-    "nodemon": "^3.0.3"
+    "nodemon": "^3.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": ">=18.0.0"

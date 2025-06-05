@@ -35,9 +35,9 @@ COPY package*.json ./
 RUN npm install --production
 
 # Copy source files
-COPY server.js ./
-COPY index.js ./
-COPY logger.js ./
+COPY src/server.ts ./
+COPY src/index.ts ./
+COPY src/logger.ts ./
 # Environment variables with defaults
 ENV NODE_ADDRESS=""
 ENV PRIVATE_KEY=""
